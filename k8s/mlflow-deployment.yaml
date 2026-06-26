@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      serviceAccountName: mlflow
+      initContainers:
+        - name: fetch-db-secret
+          image: amazon/aws-cli:2.16.1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id sandbox-eks/mlflow/db --query SecretString --output text --region "$AWS_REGION")
+              export SECRET_JSON
+              python - <<'PY'
+              import json
+              import os
+              from pathlib import Path
+
+              secret = json.loads(os.environ["SECRET_JSON"])
+              lines = [
+                  f"DB_USERNAME={secret['username']}",
+                  f"DB_PASSWORD={secret['password']}",
+                  f"DB_HOST={secret['host']}",
+                  f"DB_PORT={secret['port']}",
+                  f"DB_NAME={secret['dbname']}",
+              ]
+              Path("/shared/db.env").write_text("\n".join(lines) + "\n")
+              PY
+          env:
+            - name: AWS_REGION
+              value: us-west-2
+          volumeMounts:
+            - name: shared-secret
+              mountPath: /shared
+      containers:
+        - name: mlflow
+          image: ghcr.io/mlflow/mlflow:v2.14.1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -a
+              . /shared/db.env
+              set +a
+              export MLFLOW_TRACKING_URI="http://0.0.0.0:5000"
+              export MLFLOW_BACKEND_STORE_URI="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+              export MLFLOW_DEFAULT_ARTIFACT_ROOT="s3://mlflow-artifacts"
+              mlflow server --host 0.0.0.0 --port 5000
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: shared-secret
+              mountPath: /shared
+      volumes:
+        - name: shared-secret
+          emptyDir: {}
