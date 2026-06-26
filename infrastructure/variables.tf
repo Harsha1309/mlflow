@@ -66,3 +66,39 @@ variable "node_disk_size" {
   type        = number
   default     = 20
 }
+
+variable "db_instance_class" {
+  description = "RDS instance class for the MLflow PostgreSQL database."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "db_storage_gb" {
+  description = "RDS storage size in GB for the MLflow PostgreSQL database."
+  type        = number
+  default     = 20
+}
+
+variable "db_name" {
+  description = "Initial database name for the MLflow PostgreSQL instance."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "db_username" {
+  description = "Master username for the MLflow PostgreSQL instance."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_namespace" {
+  description = "Namespace for the MLflow deployment."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_service_account_name" {
+  description = "Service account name used by MLflow pods for IRSA."
+  type        = string
+  default     = "mlflow"
+}

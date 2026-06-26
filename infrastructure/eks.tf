@@ -25,8 +25,8 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = aws_subnet.public[*].id
 
   instance_types = var.node_instance_types # sandbox-allowed: t2/t3/t3a/t4g micro/small/medium
-  disk_size      = var.node_disk_size       # sandbox max is 100GB
-  capacity_type  = "ON_DEMAND"              # Spot is NOT supported in the sandbox
+  disk_size      = var.node_disk_size      # sandbox max is 100GB
+  capacity_type  = "ON_DEMAND"             # Spot is NOT supported in the sandbox
 
   scaling_config {
     desired_size = var.node_desired_size
