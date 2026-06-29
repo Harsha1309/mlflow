@@ -1,15 +1,16 @@
 # MLflow on EKS Sandbox
 
-This repository provisions a lightweight AWS EKS environment for MLflow and connects it to an RDS PostgreSQL database, Secrets Manager, and IRSA-based access.
+This repository provisions a lightweight AWS EKS environment for MLflow and connects it to an RDS PostgreSQL database using Secrets Store CSI Driver with the AWS Secrets Manager provider (ASCP). This replaces the older approach of using a Python-based AWS CLI init container for secret retrieval.
 
 ## What this project creates
 
 - An EKS cluster with a managed node group
 - A VPC, subnets, internet gateway, and routing
 - An RDS PostgreSQL instance for MLflow metadata
-- A Secrets Manager secret containing the DB credentials
+- A Secrets Manager secret containing the DB connection values
 - An IAM role for service-account-based access to Secrets Manager (IRSA)
-- A Kubernetes namespace, service account, Deployment, and Service for MLflow
+- The Secrets Store CSI Driver and AWS provider installed in the cluster
+- A SecretProviderClass, Deployment, and Service for MLflow
 
 ## Architecture
 
@@ -20,6 +21,9 @@ flowchart LR
     Deployment --> SA[ServiceAccount: mlflow]
     SA --> IRSA[IRSA Role]
     IRSA --> SM[Secrets Manager Secret]
+    Deployment --> CSI[CSI Volume: db-secrets]
+    CSI --> SPC[SecretProviderClass]
+    SPC --> SM
     Deployment --> RDS[(RDS PostgreSQL)]
     Deployment --> EKS[EKS Node Group]
     EKS --> Cluster[EKS Cluster]
@@ -29,7 +33,7 @@ flowchart LR
 ## Repository layout
 
 - [infrastructure/](infrastructure/) — Terraform code for AWS resources
-- [k8s/](k8s/) — Kubernetes manifests for the MLflow app
+- [k8s/](k8s/) — Kubernetes manifests for the MLflow app and CSI secret provider
 
 ## Prerequisites
 
@@ -38,6 +42,7 @@ Before you start, make sure you have:
 - AWS CLI configured with sandbox credentials
 - Terraform installed
 - kubectl installed
+- Helm installed
 - Access to the target AWS account and region
 
 Verify your AWS CLI setup:
@@ -75,7 +80,7 @@ Create the AWS resources:
 terraform apply --auto-approve
 ```
 
-After apply, note the outputs such as the cluster endpoint and RDS endpoint.
+After apply, note the outputs such as the cluster endpoint, IRSA role ARN, and RDS endpoint.
 
 ### 2) Configure kubectl for the new EKS cluster
 
@@ -87,20 +92,38 @@ aws eks update-kubeconfig --region us-west-2 --name sandbox-eks
 
 If you changed the cluster name, use the value from Terraform output instead.
 
-### 3) Apply the Kubernetes manifests
+### 3) Install the Secrets Store CSI driver and AWS provider
+
+Install the CSI driver and the AWS Secrets Manager provider in the cluster:
+
+```bash
+helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
+helm repo update
+
+helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+  --namespace kube-system --create-namespace
+
+helm upgrade --install secrets-store-csi-driver-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
+  --namespace kube-system --create-namespace \
+  --set secrets-store-csi-driver.install=false
+```
+
+### 4) Apply the Kubernetes manifests
 
 From the repo root:
 
 ```bash
-cd ../k8s
+cd k8s
 kubectl apply -f namespace.yaml
+kubectl apply -f secret-provider-class.yaml
 kubectl apply -f mlflow-deployment.yaml
 kubectl apply -f mlflow-service.yaml
 ```
 
-### 4) Verify the deployment
+### 5) Verify the deployment
 
-Check the namespace and pods:
+Check the namespace, pods, and service:
 
 ```bash
 kubectl get ns mlflow
@@ -114,7 +137,7 @@ Inspect pod logs if needed:
 kubectl logs -n mlflow deploy/mlflow
 ```
 
-### 5) Access MLflow
+### 6) Access MLflow
 
 Port-forward the service locally:
 
@@ -149,11 +172,12 @@ Key files:
 
 ## Kubernetes details
 
-The MLflow Deployment uses an init container to fetch the database credentials from AWS Secrets Manager and write them to a shared volume. The main container then uses those values to start MLflow.
+The MLflow Deployment mounts database credentials from AWS Secrets Manager through a CSI volume. The mounted files are read directly by the MLflow container from the path /mnt/secrets, so no AWS CLI or Python-based secret-fetching init container is required.
 
 Key files:
 
 - [k8s/namespace.yaml](k8s/namespace.yaml)
+- [k8s/secret-provider-class.yaml](k8s/secret-provider-class.yaml)
 - [k8s/mlflow-deployment.yaml](k8s/mlflow-deployment.yaml)
 - [k8s/mlflow-service.yaml](k8s/mlflow-service.yaml)
 
@@ -161,7 +185,7 @@ Key files:
 
 - The deployment uses a simple sandbox-friendly setup with public subnets and public IPs on worker nodes.
 - The RDS instance is not publicly exposed, but it is reachable from the EKS VPC.
-- The MLflow pod uses IRSA to read one secret from Secrets Manager.
+- The MLflow pod uses IRSA to read one secret from Secrets Manager through the CSI volume.
 - This is intended for learning and sandbox use, not production-grade networking or resilience.
 
 ## Cleanup
@@ -184,8 +208,14 @@ terraform destroy --auto-approve
 ```
 
 ```bash
-cd ../k8s
+cd k8s
+helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
+helm repo update
+helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver --namespace kube-system --create-namespace
+helm upgrade --install secrets-store-csi-driver-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws --namespace kube-system --create-namespace --set secrets-store-csi-driver.install=false
 kubectl apply -f namespace.yaml
+kubectl apply -f secret-provider-class.yaml
 kubectl apply -f mlflow-deployment.yaml
 kubectl apply -f mlflow-service.yaml
 kubectl get pods -n mlflow
