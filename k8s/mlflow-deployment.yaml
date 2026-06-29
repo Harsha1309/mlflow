@@ -14,37 +14,6 @@ spec:
         app: mlflow
     spec:
       serviceAccountName: mlflow
-      initContainers:
-        - name: fetch-db-secret
-          image: amazon/aws-cli:2.16.1
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -e
-              SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id sandbox-eks/mlflow/db --query SecretString --output text --region "$AWS_REGION")
-              export SECRET_JSON
-              python - <<'PY'
-              import json
-              import os
-              from pathlib import Path
-
-              secret = json.loads(os.environ["SECRET_JSON"])
-              lines = [
-                  f"DB_USERNAME={secret['username']}",
-                  f"DB_PASSWORD={secret['password']}",
-                  f"DB_HOST={secret['host']}",
-                  f"DB_PORT={secret['port']}",
-                  f"DB_NAME={secret['dbname']}",
-              ]
-              Path("/shared/db.env").write_text("\n".join(lines) + "\n")
-              PY
-          env:
-            - name: AWS_REGION
-              value: us-west-2
-          volumeMounts:
-            - name: shared-secret
-              mountPath: /shared
       containers:
         - name: mlflow
           image: ghcr.io/mlflow/mlflow:v2.14.1
@@ -52,9 +21,13 @@ spec:
             - /bin/sh
             - -c
             - |
-              set -a
-              . /shared/db.env
-              set +a
+              set -e
+              python -m pip install --no-cache-dir psycopg2-binary
+              export DB_USERNAME="$(cat /mnt/secrets/DB_USERNAME)"
+              export DB_PASSWORD="$(cat /mnt/secrets/DB_PASSWORD)"
+              export DB_HOST="$(cat /mnt/secrets/DB_HOST)"
+              export DB_PORT="$(cat /mnt/secrets/DB_PORT)"
+              export DB_NAME="$(cat /mnt/secrets/DB_NAME)"
               export MLFLOW_TRACKING_URI="http://0.0.0.0:5000"
               export MLFLOW_BACKEND_STORE_URI="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
               export MLFLOW_DEFAULT_ARTIFACT_ROOT="s3://mlflow-artifacts"
@@ -62,8 +35,13 @@ spec:
           ports:
             - containerPort: 5000
           volumeMounts:
-            - name: shared-secret
-              mountPath: /shared
+            - name: db-secrets
+              mountPath: /mnt/secrets
+              readOnly: true
       volumes:
-        - name: shared-secret
-          emptyDir: {}
+        - name: db-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: mlflow-db-secret

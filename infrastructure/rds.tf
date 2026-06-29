@@ -55,7 +55,7 @@ resource "aws_secretsmanager_secret_version" "mlflow_db" {
     password = random_password.mlflow_db.result
     engine   = "postgres"
     host     = aws_db_instance.mlflow.address
-    port     = 5432
+    port     = "5432"
     dbname   = var.db_name
   })
 }
