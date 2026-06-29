@@ -10,7 +10,7 @@ This repository provisions a lightweight AWS EKS environment for MLflow and conn
 - A Secrets Manager secret containing the DB connection values
 - An IAM role for service-account-based access to Secrets Manager (IRSA)
 - The Secrets Store CSI Driver and AWS provider installed in the cluster
-- A SecretProviderClass, Deployment, and Service for MLflow
+- A SecretProviderClass, Deployment, Service, and ingress routing for MLflow
 
 ## Architecture
 
@@ -109,7 +109,24 @@ helm upgrade --install secrets-store-csi-driver-provider-aws aws-secrets-manager
   --set secrets-store-csi-driver.install=false
 ```
 
-### 4) Apply the Kubernetes manifests
+### 4) Install Traefik ingress controller
+
+Add the Traefik Helm repository and install Traefik in its own namespace:
+
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+
+kubectl create namespace traefik
+
+helm install traefik traefik/traefik \
+  --namespace traefik \
+  --set ports.web.port=8000 \
+  --set ports.websecure.port=8443 \
+  --set service.type=LoadBalancer
+```
+
+### 5) Apply the Kubernetes manifests
 
 From the repo root:
 
@@ -119,9 +136,10 @@ kubectl apply -f namespace.yaml
 kubectl apply -f secret-provider-class.yaml
 kubectl apply -f mlflow-deployment.yaml
 kubectl apply -f mlflow-service.yaml
+kubectl apply -f mlflow-ingressroute.yaml
 ```
 
-### 5) Verify the deployment
+### 6) Verify the deployment
 
 Check the namespace, pods, and service:
 
@@ -137,9 +155,19 @@ Inspect pod logs if needed:
 kubectl logs -n mlflow deploy/mlflow
 ```
 
-### 6) Access MLflow
+### 7) Access MLflow
 
-Port-forward the service locally:
+You can access MLflow either through the ingress route or by port-forwarding locally:
+
+Via ingress:
+
+```bash
+kubectl get svc -n traefik
+```
+
+Then open the external address exposed by the Traefik LoadBalancer.
+
+Or use port-forward:
 
 ```bash
 kubectl port-forward -n mlflow svc/mlflow 5000:5000
@@ -174,12 +202,11 @@ Key files:
 
 The MLflow Deployment mounts database credentials from AWS Secrets Manager through a CSI volume. The mounted files are read directly by the MLflow container from the path /mnt/secrets, so no AWS CLI or Python-based secret-fetching init container is required.
 
-Key files:
-
 - [k8s/namespace.yaml](k8s/namespace.yaml)
 - [k8s/secret-provider-class.yaml](k8s/secret-provider-class.yaml)
 - [k8s/mlflow-deployment.yaml](k8s/mlflow-deployment.yaml)
 - [k8s/mlflow-service.yaml](k8s/mlflow-service.yaml)
+- [k8s/mlflow-ingressroute.yaml](k8s/mlflow-ingressroute.yaml)
 
 ## Important notes
 
