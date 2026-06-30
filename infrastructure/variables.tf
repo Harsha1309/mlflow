@@ -18,7 +18,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "Kubernetes version. Must be a version in EKS standard support (not extended) per sandbox rules."
   type        = string
-  default     = "1.34"
+  default     = "1.36"
 }
 
 variable "vpc_cidr" {

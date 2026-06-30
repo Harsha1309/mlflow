@@ -1,7 +1,7 @@
 ############################################################
 # Run this FIRST, in its own folder, with local state.
-# It creates the S3 bucket + DynamoDB table that the main
-# EKS config will then use as its remote backend.
+# It creates the S3 bucket that the main EKS config will
+# use as its remote backend.
 #
 #   cd backend-bootstrap
 #   terraform init
@@ -46,11 +46,6 @@ variable "bucket_prefix" {
   default     = "eks-sandbox-tfstate"
 }
 
-variable "lock_table_name" {
-  description = "DynamoDB table name used for Terraform state locking."
-  type        = string
-  default     = "eks-sandbox-tf-locks"
-}
 
 resource "random_id" "suffix" {
   byte_length = 4
@@ -97,30 +92,10 @@ resource "aws_s3_bucket_public_access_block" "tf_state" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
-
-resource "aws_dynamodb_table" "tf_locks" {
-  name         = var.lock_table_name
-  billing_mode = "PAY_PER_REQUEST" # no capacity planning needed for a low-traffic lock table
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = {
-    Name    = "terraform-locks"
-    Purpose = "eks-sandbox-backend"
-  }
-}
-
 output "state_bucket_name" {
   value = aws_s3_bucket.tf_state.bucket
 }
 
-output "lock_table_name" {
-  value = aws_dynamodb_table.tf_locks.name
-}
 
 output "backend_config_block" {
   description = "Copy this into the backend.tf of your main EKS config."
@@ -130,7 +105,9 @@ output "backend_config_block" {
       bucket         = "${aws_s3_bucket.tf_state.bucket}"
       key            = "eks-sandbox/terraform.tfstate"
       region         = "${var.aws_region}"
-      dynamodb_table = "${aws_dynamodb_table.tf_locks.name}"
+      # DynamoDB-based locking is deprecated. Use S3 lockfile-based
+      # locking instead by setting `use_lockfile = true` below.
+      use_lockfile   = true
       encrypt        = true
     }
   }
