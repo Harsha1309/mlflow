@@ -42,7 +42,8 @@ Before you start, make sure you have:
 - AWS CLI configured with sandbox credentials
 - Terraform installed
 - kubectl installed
-- Helm installed
+- Helm installed (used by the Terraform Helm provider)
+- `envsubst` available for substituting the `MLFLOW_HOST` value into `mlflow-ingressroute.yaml`
 - Access to the target AWS account and region
 
 Verify your AWS CLI setup:
@@ -100,49 +101,35 @@ Note: DynamoDB-based locking is deprecated. The bootstrap output now recommends 
 
 ### 2) Configure kubectl for the new EKS cluster
 
-Run the output command from Terraform:
+Run the helper command from Terraform:
 
 ```bash
-aws eks update-kubeconfig --region us-west-2 --name sandbox-eks
+terraform output configure_kubectl
 ```
 
-If you changed the cluster name, use the value from Terraform output instead.
-
-### 3) Install the Secrets Store CSI driver and AWS provider
-
-Install the CSI driver and the AWS Secrets Manager provider in the cluster:
+If that output is blank or you want the explicit command, use the cluster name and region from Terraform outputs:
 
 ```bash
-helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
-helm repo update
-
-helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
-  --namespace kube-system --create-namespace
-
-helm upgrade --install secrets-store-csi-driver-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
-  --namespace kube-system --create-namespace \
-  --set secrets-store-csi-driver.install=false
+aws eks update-kubeconfig --region <aws_region> --name <cluster_name>
 ```
 
-### 4) Install Traefik ingress controller
+### 3) Deploy cluster add-ons with Terraform
 
-Add the Traefik Helm repository and install Traefik in its own namespace:
+The Terraform configuration in `infrastructure/addons.tf` installs:
+
+- the Secrets Store CSI Driver
+- the AWS Secrets Manager provider
+- Traefik as a Kubernetes ingress controller
+
+After `terraform apply`, these Helm releases are provisioned automatically. You do not need to install them manually.
+
+If you want to verify the Traefik service later:
 
 ```bash
-helm repo add traefik https://traefik.github.io/charts
-helm repo update
-
-kubectl create namespace traefik
-
-helm install traefik traefik/traefik \
-  --namespace traefik \
-  --set ports.web.port=8000 \
-  --set ports.websecure.port=8443 \
-  --set service.type=LoadBalancer
+kubectl get svc -n traefik
 ```
 
-### 5) Apply the Kubernetes manifests
+### 4) Apply the Kubernetes manifests
 
 From the repo root:
 
@@ -152,8 +139,16 @@ kubectl apply -f namespace.yaml
 kubectl apply -f secret-provider-class.yaml
 kubectl apply -f mlflow-deployment.yaml
 kubectl apply -f mlflow-service.yaml
-kubectl apply -f mlflow-ingressroute.yaml
 ```
+
+Set the Traefik host from Terraform output and apply the IngressRoute with environment substitution:
+
+```bash
+export MLFLOW_HOST="$(terraform output -raw traefik_lb_hostname)"
+envsubst < mlflow-ingressroute.yaml | kubectl apply -f -
+```
+
+If `terraform output traefik_lb_hostname` is empty immediately after apply, wait a few minutes and retry.
 
 ### 6) Verify the deployment
 
@@ -252,15 +247,12 @@ terraform destroy --auto-approve
 
 ```bash
 cd k8s
-helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
-helm repo update
-helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver --namespace kube-system --create-namespace
-helm upgrade --install secrets-store-csi-driver-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws --namespace kube-system --create-namespace --set secrets-store-csi-driver.install=false
 kubectl apply -f namespace.yaml
 kubectl apply -f secret-provider-class.yaml
 kubectl apply -f mlflow-deployment.yaml
 kubectl apply -f mlflow-service.yaml
+export MLFLOW_HOST="$(terraform output -raw traefik_lb_hostname)"
+envsubst < mlflow-ingressroute.yaml | kubectl apply -f -
 kubectl get pods -n mlflow
 kubectl logs -n mlflow deploy/mlflow
 kubectl port-forward -n mlflow svc/mlflow 5000:5000
