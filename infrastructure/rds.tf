@@ -11,7 +11,7 @@ resource "aws_iam_openid_connect_provider" "eks" {
 resource "random_password" "mlflow_db" {
   length           = 24
   special          = true
-  override_special = "!@#%^*()-_=+"
+  override_special = "!#%^*()-_=+"
 }
 
 resource "aws_security_group" "rds" {

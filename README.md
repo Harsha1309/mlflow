@@ -82,6 +82,22 @@ terraform apply --auto-approve
 
 After apply, note the outputs such as the cluster endpoint, IRSA role ARN, and RDS endpoint.
 
+#### Backend bootstrap (state storage)
+
+Before running the main `infrastructure` Terraform configuration, create the remote backend objects (S3 bucket). Run the small bootstrap in `infrastructure/backend-bootstrap` first:
+
+```bash
+cd infrastructure/backend-bootstrap
+terraform init
+terraform apply --auto-approve
+
+# The bootstrap creates the S3 bucket. Copy the `backend_config_block` output
+# into the `terraform` block of `infrastructure/versions.tf` or pass it
+# via `-backend-config` when running `terraform init` in `infrastructure`.
+```
+
+Note: DynamoDB-based locking is deprecated. The bootstrap output now recommends `use_lockfile = true` for S3-based locking.
+
 ### 2) Configure kubectl for the new EKS cluster
 
 Run the output command from Terraform:
