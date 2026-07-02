@@ -7,7 +7,7 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`ad387674789c142cb8fa72d61b47e183-629351163.us-west-2.elb.amazonaws.com`)
+    - match: Host(`${MLFLOW_HOST}`)
       kind: Rule
       services:
         - name: mlflow

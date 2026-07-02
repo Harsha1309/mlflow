@@ -37,3 +37,8 @@ output "mlflow_irsa_role_arn" {
   description = "IAM role ARN for MLflow IRSA."
   value       = aws_iam_role.mlflow_irsa.arn
 }
+
+output "traefik_lb_hostname" {
+  description = "Traefik LoadBalancer hostname. May be blank right after apply — the ELB DNS name can take 1-2 min to populate; re-run `terraform output traefik_lb_hostname` if empty."
+  value       = try(data.kubernetes_service.traefik.status[0].load_balancer[0].ingress[0].hostname, "")
+}
