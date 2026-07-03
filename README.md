@@ -219,6 +219,21 @@ The MLflow Deployment mounts database credentials from AWS Secrets Manager throu
 - [k8s/mlflow-service.yaml](k8s/mlflow-service.yaml)
 - [k8s/mlflow-ingressroute.yaml](k8s/mlflow-ingressroute.yaml)
 
+## Secrets Store CSI Driver (important cluster note)
+
+- We include a cluster-level `CSIDriver` manifest to allow the Secrets Store CSI driver to request projected service account tokens. Without this, CSI mounts can fail with the error: "serviceAccount.tokens not provided - ensure tokenRequests is configured in CSIDriver".
+
+- File: [k8s/csidriver-secrets-store.yaml](k8s/csidriver-secrets-store.yaml)
+
+Apply the manifest after cluster provisioning:
+
+```bash
+kubectl apply -f k8s/csidriver-secrets-store.yaml
+kubectl get csidriver secrets-store.csi.k8s.io -o yaml | sed -n '/tokenRequests/,/volumeLifecycleModes/p'
+```
+
+Recommended: manage this manifest via your cluster bootstrap (Helm values, Terraform, or GitOps) so upgrades don't remove it.
+
 ## Important notes
 
 - The deployment uses a simple sandbox-friendly setup with public subnets and public IPs on worker nodes.
