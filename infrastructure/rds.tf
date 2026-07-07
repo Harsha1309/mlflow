@@ -48,17 +48,6 @@ resource "aws_secretsmanager_secret" "mlflow_db" {
   name = "${var.cluster_name}/mlflow/db"
 }
 
-resource "aws_secretsmanager_secret_version" "mlflow_db" {
-  secret_id = aws_secretsmanager_secret.mlflow_db.id
-  secret_string = jsonencode({
-    username = var.db_username
-    password = random_password.mlflow_db.result
-    engine   = "postgres"
-    host     = aws_db_instance.mlflow.address
-    port     = "5432"
-    dbname   = var.db_name
-  })
-}
 
 resource "aws_db_instance" "mlflow" {
   identifier                   = "${var.cluster_name}-mlflow"
@@ -87,61 +76,3 @@ resource "aws_db_instance" "mlflow" {
   }
 }
 
-resource "aws_iam_role" "mlflow_irsa" {
-  name = "${var.cluster_name}-mlflow-irsa"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.eks.arn
-      }
-      Action = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:${var.mlflow_namespace}:${var.mlflow_service_account_name}"
-          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
-        }
-      }
-    }]
-  })
-}
-
-resource "aws_iam_policy" "mlflow_secret_read" {
-  name = "${var.cluster_name}-mlflow-secret-read"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "secretsmanager:GetSecretValue"
-      ]
-      Resource = [aws_secretsmanager_secret.mlflow_db.arn]
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "mlflow_secret_read" {
-  role       = aws_iam_role.mlflow_irsa.name
-  policy_arn = aws_iam_policy.mlflow_secret_read.arn
-}
-
-resource "kubernetes_namespace" "mlflow" {
-  metadata {
-    name = var.mlflow_namespace
-  }
-}
-
-resource "kubernetes_service_account" "mlflow" {
-  metadata {
-    name      = var.mlflow_service_account_name
-    namespace = kubernetes_namespace.mlflow.metadata[0].name
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.mlflow_irsa.arn
-    }
-  }
-
-  depends_on = [kubernetes_namespace.mlflow]
-}

@@ -1,0 +1,75 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: python src/prepare.py
+    deps:
+    - path: data/raw/winequality-red.csv
+      hash: md5
+      md5: 5a21be48a5bfd12b77c16d71a7bd598d
+      size: 91969
+    - path: src/prepare.py
+      hash: md5
+      md5: 28933f28fe1e6ee55f413644e8c7e660
+      size: 1480
+    params:
+      params.yaml:
+        prepare.random_state: 42
+        prepare.test_size: 0.2
+    outs:
+    - path: data/prepared/test.csv
+      hash: md5
+      md5: a2b49eb44d71e6f0e50d615cb3b5932f
+      size: 15741
+    - path: data/prepared/train.csv
+      hash: md5
+      md5: 89e3c7285e2625e72413a67fe12bb6da
+      size: 62574
+  train:
+    cmd: python src/train.py
+    deps:
+    - path: data/prepared/test.csv
+      hash: md5
+      md5: a2b49eb44d71e6f0e50d615cb3b5932f
+      size: 15741
+    - path: data/prepared/train.csv
+      hash: md5
+      md5: 89e3c7285e2625e72413a67fe12bb6da
+      size: 62574
+    - path: src/train.py
+      hash: md5
+      md5: 2ab427cab868e1308f3fc4cbdde7e797
+      size: 3296
+    params:
+      params.yaml:
+        mlflow.experiment_name: wine-quality
+        mlflow.tracking_uri: 
+          http://a244e7ec2733a40099151fff4edaea54-115384793.us-west-2.elb.amazonaws.com
+        train.max_depth: 8
+        train.min_samples_leaf: 2
+        train.n_estimators: 200
+        train.random_state: 42
+    outs:
+    - path: metrics.json
+      hash: md5
+      md5: 277e6f9626b11a5a380d543b3c954f8c
+      size: 89
+    - path: model/run_id.txt
+      hash: md5
+      md5: ffd691f69ad20d41a7a26d65f7a99863
+      size: 32
+  evaluate:
+    cmd: python src/evaluate.py
+    deps:
+    - path: model/run_id.txt
+      hash: md5
+      md5: ffd691f69ad20d41a7a26d65f7a99863
+      size: 32
+    - path: src/evaluate.py
+      hash: md5
+      md5: 0002f7902bd825384378879ad836ada5
+      size: 1301
+    outs:
+    - path: eval_plot.png
+      hash: md5
+      md5: 40536a7be72a8c9a4a9ded8d48385eaa
+      size: 37973

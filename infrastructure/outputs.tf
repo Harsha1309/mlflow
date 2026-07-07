@@ -42,3 +42,18 @@ output "traefik_lb_hostname" {
   description = "Traefik LoadBalancer hostname. May be blank right after apply — the ELB DNS name can take 1-2 min to populate; re-run `terraform output traefik_lb_hostname` if empty."
   value       = try(data.kubernetes_service.traefik.status[0].load_balancer[0].ingress[0].hostname, "")
 }
+
+output "dvc_bucket_name" {
+  description = "S3 bucket name to use as the DVC remote"
+  value       = aws_s3_bucket.dvc_store.bucket
+}
+
+output "dvc_remote_url" {
+  description = "Full s3:// URL for data-science/.dvc/config"
+  value       = "s3://${aws_s3_bucket.dvc_store.bucket}"
+}
+
+output "dvc_irsa_role_arn" {
+  description = "IAM role ARN to annotate the dvc-runner ServiceAccount with"
+  value       = module.dvc_irsa_role.iam_role_arn
+}

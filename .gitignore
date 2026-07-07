@@ -11,6 +11,20 @@ override.tf.json
 *.tfvars
 *.tfvars.json
 
+# Local Python envs and data-science temp files
+data-science/.venv/
+data-science/.python-version
+
+# DVC generated cache and temp data
+data-science/.dvc/cache/
+data-science/.dvc/tmp/
+
+# Pipeline outputs and local artifacts
+data-science/data/prepared/
+data-science/model/
+data-science/eval_plot.png
+data-science/metrics.json
+
 # OS files
 .DS_Store
 

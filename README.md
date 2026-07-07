@@ -32,8 +32,9 @@ flowchart LR
 
 ## Repository layout
 
-- [infrastructure/](infrastructure/) — Terraform code for AWS resources
-- [k8s/](k8s/) — Kubernetes manifests for the MLflow app and CSI secret provider
+- [infrastructure/](infrastructure/) — Terraform code for AWS resources (EKS, RDS, S3 for DVC, IAM roles)
+- [k8s/](k8s/) — Kubernetes manifests for the MLflow app, CSI secret provider, and DVC runners
+- [data-science/](data-science/) — ML pipeline with DVC data versioning and MLflow experiment tracking
 
 ## Prerequisites
 
@@ -150,7 +151,7 @@ envsubst < mlflow-ingressroute.yaml | kubectl apply -f -
 
 If `terraform output traefik_lb_hostname` is empty immediately after apply, wait a few minutes and retry.
 
-### 6) Verify the deployment
+### 5) Verify the deployment
 
 Check the namespace, pods, and service:
 
@@ -164,6 +165,46 @@ Inspect pod logs if needed:
 
 ```bash
 kubectl logs -n mlflow deploy/mlflow
+```
+
+### 6) Run the DVC + MLflow pipeline
+
+From the repo root, switch to the `data-science` folder and prepare the Python environment:
+
+```bash
+cd data-science
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Configure the DVC remote using Terraform output:
+
+```bash
+DVC_BUCKET=$(cd ../infrastructure && terraform output -raw dvc_bucket_name)
+dvc remote modify s3remote url "s3://$DVC_BUCKET"
+dvc config core.remote s3remote
+```
+
+Alternatively, run the built-in setup script:
+
+```bash
+bash setup-dvc-s3.sh
+```
+
+Pull the raw data, then run the pipeline:
+
+```bash
+dvc pull
+export MLFLOW_TRACKING_URI="http://$(terraform output -raw traefik_lb_hostname)"
+dvc repro
+```
+
+If you prefer local port-forwarding instead of the ingress route:
+
+```bash
+kubectl port-forward -n mlflow svc/mlflow 5000:5000
+export MLFLOW_TRACKING_URI="http://localhost:5000"
+dvc repro
 ```
 
 ### 7) Access MLflow
@@ -187,6 +228,11 @@ kubectl port-forward -n mlflow svc/mlflow 5000:5000
 Then open:
 
 ```text
+http://localhost:5000
+```
+
+## Terraform details
+
 http://localhost:5000
 ```
 
@@ -233,6 +279,102 @@ kubectl get csidriver secrets-store.csi.k8s.io -o yaml | sed -n '/tokenRequests/
 ```
 
 Recommended: manage this manifest via your cluster bootstrap (Helm values, Terraform, or GitOps) so upgrades don't remove it.
+
+## Data Science: DVC + S3 for Data Versioning
+
+This project includes **DVC (Data Version Control)** for versioning large CSV files and ML artifacts in S3. DVC pairs with Git to track data and pipelines the same way you track code.
+
+### Quick Start
+
+1. **Infrastructure** (one-time):
+   ```bash
+   cd infrastructure
+   terraform apply --auto-approve
+   ```
+   This creates:
+   - S3 bucket: `{cluster-name}-dvc-store`
+   - IAM policy + IRSA role for pod access
+   - All configured in `infrastructure/s3.tf`
+
+2. **Local Development**:
+   ```bash
+   cd data-science
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   
+   # Auto-configure DVC to use your S3 bucket
+   bash setup-dvc-s3.sh
+   ```
+
+3. **Add Your CSV**:
+   ```bash
+   dvc add data/raw/your-file.csv
+   git add data/raw/your-file.csv.dvc .gitignore
+   git commit -m "Track data with DVC"
+   dvc push  # Upload to S3
+   ```
+
+4. **Run the Pipeline**:
+   ```bash
+   export MLFLOW_TRACKING_URI="http://<your-mlflow-ingressroute-host>"
+   dvc repro  # Automatically pulls data from S3, runs stages, logs to MLflow
+   ```
+
+### Key Concepts
+
+- **Data in Git?** No — only `.dvc` metadata files (with MD5 hashes)
+- **Actual CSV?** Stored in S3, automatically fetched by `dvc pull`
+- **Pipeline Definition?** [dvc.yaml](data-science/dvc.yaml) — declares stages, dependencies, and outputs
+- **Experiments?** `dvc exp run --set-param train.n_estimators=300` — compare hyperparams locally
+- **MLflow Integration?** Every `dvc repro` logs a corresponding MLflow run for full history + model registry
+
+### Documentation
+
+For full setup, troubleshooting, and in-cluster deployment:
+- **Local Development**: [data-science/DVC_SETUP.md](data-science/DVC_SETUP.md)
+- **K8s Job Templates**: [k8s/dvc-runner-manifests.yaml](k8s/dvc-runner-manifests.yaml)
+
+### Architecture Diagram
+
+```mermaid
+flowchart LR
+    Dev[Developer Laptop]
+    
+    subgraph Local["Local Workflow"]
+        CSV["your-file.csv"]
+        DVC_FILE[".dvc file\n(MD5 hash)"]
+        Git["Git Commit"]
+    end
+    
+    subgraph Cloud["AWS Infrastructure"]
+        S3["S3 Bucket\n(dvc-store)"]
+        RDS["RDS PostgreSQL\n(MLflow Backend)"]
+    end
+    
+    subgraph K8s["Kubernetes Cluster"]
+        Pod["DVC Runner Pod"]
+        IRSA["IRSA Role\n(S3 Access)"]
+    end
+    
+    Dev -->|dvc add| CSV
+    CSV -->|tracked as| DVC_FILE
+    DVC_FILE -->|commit| Git
+    Dev -->|dvc push| S3
+    
+    Pod -->|IRSA| IRSA
+    IRSA -->|credentials| S3
+    Pod -->|dvc pull| S3
+    Pod -->|logs run| RDS
+    
+    Git -.->|clone| K8s
+```
+
+### Recommended Files to Review
+
+- [Infrastructure S3/IAM](infrastructure/s3.tf) — Bucket + IRSA role creation
+- [DVC Configuration](data-science/.dvc/config) — Remote storage settings
+- [Pipeline Definition](data-science/dvc.yaml) — Stages and dependencies
+- [K8s IRSA Setup](k8s/dvc-runner-manifests.yaml) — Service account + job templates
 
 ## Important notes
 

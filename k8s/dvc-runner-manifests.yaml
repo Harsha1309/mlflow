@@ -1,0 +1,140 @@
+---
+# dvc-runner-serviceaccount.yaml
+# ServiceAccount for DVC runners (training jobs, CI pipelines) with IRSA
+# Attach this to any pod that needs S3 access for DVC
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dvc-runner
+  namespace: mlflow
+  annotations:
+    # Replace {ACCOUNT_ID} and {CLUSTER_NAME} with your actual values
+    # Format: arn:aws:iam::{ACCOUNT_ID}:role/{CLUSTER_NAME}-dvc-irsa
+    # Get these from: terraform output dvc_irsa_role_arn
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/CLUSTER_NAME-dvc-irsa
+
+---
+# dvc-pipeline-job.yaml
+# Example Kubernetes Job that runs DVC pipeline in the cluster
+# Uses IRSA to access S3 without hardcoded credentials
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dvc-train-wine-quality
+  namespace: mlflow
+  labels:
+    app: dvc-pipeline
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: dvc-pipeline
+    spec:
+      serviceAccountName: dvc-runner  # Use the IRSA-enabled SA
+      restartPolicy: Never
+      containers:
+      - name: dvc-pipeline
+        # Use the same Python version as your local dev environment
+        image: python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        
+        # Clone repo, install deps, run pipeline
+        command: ["bash", "-c"]
+        args:
+          - |
+            set -e
+            
+            echo "📦 Installing dependencies..."
+            apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+            
+            echo "📥 Cloning repository..."
+            git clone https://github.com/your-org/mlflow.git /workspace
+            cd /workspace/data-science
+            
+            echo "🐍 Setting up Python environment..."
+            pip install --no-cache-dir -q -r requirements.txt
+            
+            echo "📊 Pulling data from S3..."
+            dvc pull
+            
+            echo "🚀 Running DVC pipeline..."
+            export MLFLOW_TRACKING_URI="http://mlflow-service.mlflow.svc.cluster.local:5000"
+            dvc repro
+            
+            echo "📤 Pushing outputs to S3..."
+            dvc push
+            
+            echo "✅ Pipeline complete!"
+        
+        # Environment variables
+        env:
+        - name: DVC_NO_ANALYTICS
+          value: "true"
+        - name: MLFLOW_EXPERIMENT_NAME
+          value: "wine-quality-k8s"
+        
+        # Resource limits (adjust based on your cluster)
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        
+        # Optional: Add volume for larger models/data (requires PVC)
+        # volumeMounts:
+        # - name: data-cache
+        #   mountPath: /workspace/data
+      
+      # Optional: Volume for persistent data cache
+      # volumes:
+      # - name: data-cache
+      #   persistentVolumeClaim:
+      #     claimName: dvc-data-cache
+
+---
+# dvc-cron-pipeline.yaml
+# Optional: CronJob for automated scheduled pipeline runs
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dvc-train-daily
+  namespace: mlflow
+spec:
+  # Run daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: dvc-pipeline-cron
+        spec:
+          serviceAccountName: dvc-runner
+          restartPolicy: Never
+          containers:
+          - name: dvc-pipeline
+            image: python:3.11-slim
+            command: ["bash", "-c"]
+            args:
+              - |
+                apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+                git clone https://github.com/your-org/mlflow.git /workspace
+                cd /workspace/data-science
+                pip install --no-cache-dir -q -r requirements.txt
+                dvc pull
+                export MLFLOW_TRACKING_URI="http://mlflow-service.mlflow.svc.cluster.local:5000"
+                dvc repro
+                dvc push
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "1Gi"
+              limits:
+                cpu: "2000m"
+                memory: "4Gi"

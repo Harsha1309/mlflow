@@ -102,3 +102,27 @@ variable "mlflow_service_account_name" {
   type        = string
   default     = "mlflow"
 }
+
+variable "project_name" {
+  description = "Short project name used in resource naming, e.g. 'mlflow'"
+  type        = string
+  default     = "mlflow"
+}
+
+variable "environment" {
+  description = "Environment name, e.g. 'dev' or 'prod'"
+  type        = string
+  default     = "dev"
+}
+
+variable "dvc_bucket_suffix" {
+  description = "Suffix appended to cluster_name to form the DVC remote storage bucket name (must be globally unique across AWS)."
+  type        = string
+  default     = "dvc-store"
+}
+
+variable "dvc_service_account_name" {
+  description = "Service account name used by DVC runners (CI jobs / training pods) for IRSA, mirroring mlflow_service_account_name."
+  type        = string
+  default     = "dvc-runner"
+}
