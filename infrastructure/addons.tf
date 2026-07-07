@@ -1,10 +1,16 @@
+resource "time_sleep" "wait_for_eks_ready" {
+  depends_on = [aws_eks_node_group.main]
+
+  create_duration = "120s"
+}
+
 resource "helm_release" "secrets_store_csi_driver" {
   name       = "csi-secrets-store"
   repository = "https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts"
   chart      = "secrets-store-csi-driver"
   namespace  = "kube-system"
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [time_sleep.wait_for_eks_ready]
 }
 
 resource "helm_release" "secrets_store_csi_driver_provider_aws" {
@@ -20,7 +26,7 @@ resource "helm_release" "secrets_store_csi_driver_provider_aws" {
     }
   ]
 
-  depends_on = [helm_release.secrets_store_csi_driver]
+  depends_on = [helm_release.secrets_store_csi_driver, time_sleep.wait_for_eks_ready]
 }
 
 resource "helm_release" "traefik" {
@@ -45,7 +51,7 @@ resource "helm_release" "traefik" {
     }
   ]
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [time_sleep.wait_for_eks_ready]
 }
 
 # Read back the Traefik Service's LB hostname so it can be used
