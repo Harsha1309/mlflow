@@ -1,0 +1,40 @@
+stages:
+  prepare:
+    cmd: python src/prepare.py
+    deps:
+      - src/prepare.py
+      - data/raw/winequality-red.csv
+    params:
+      - prepare.test_size
+      - prepare.random_state
+    outs:
+      - data/prepared/train.csv
+      - data/prepared/test.csv
+
+  train:
+    cmd: python src/train.py
+    deps:
+      - src/train.py
+      - data/prepared/train.csv
+      - data/prepared/test.csv
+    params:
+      - train.n_estimators
+      - train.max_depth
+      - train.min_samples_leaf
+      - train.random_state
+      - mlflow.experiment_name
+      - mlflow.tracking_uri
+    outs:
+      - model/run_id.txt
+    metrics:
+      - metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python src/evaluate.py
+    deps:
+      - src/evaluate.py
+      - model/run_id.txt
+    outs:
+      - eval_plot.png:
+          cache: false

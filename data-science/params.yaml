@@ -1,0 +1,14 @@
+prepare:
+  test_size: 0.2
+  random_state: 42
+
+train:
+  n_estimators: 200
+  max_depth: 8
+  min_samples_leaf: 2
+  random_state: 42
+
+mlflow:
+  experiment_name: "wine-quality"
+  # Set MLFLOW_TRACKING_URI env var to override this (recommended in CI/CD)
+  tracking_uri: "http://a244e7ec2733a40099151fff4edaea54-115384793.us-west-2.elb.amazonaws.com"

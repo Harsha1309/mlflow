@@ -1,0 +1,42 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.python-version
+.pyre/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# DVC cache and temporary files
+.dvc/cache/
+.dvc/tmp/
+.dvc/lock
+
+# DVC outputs and generated artifacts
+# Keep the DVC metadata files tracked, but ignore actual data and outputs.
+metrics.json
+eval_plot.png
+model/
+data/prepared/
+
+# Editor and OS files
+.DS_Store
+*.swp
+*.swo
+*.log
+.idea/
+.vscode/
+
+# AWS and local secrets
+*.env
+.env*
+
+# Ignore any local notebook checkpoints
+.ipynb_checkpoints/
