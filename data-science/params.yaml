@@ -11,4 +11,4 @@ train:
 mlflow:
   experiment_name: "wine-quality"
   # Set MLFLOW_TRACKING_URI env var to override this (recommended in CI/CD)
-  tracking_uri: "http://a244e7ec2733a40099151fff4edaea54-115384793.us-west-2.elb.amazonaws.com"
+  tracking_uri: "http://ac45811ab77ad486db19749e1d7509ae-1789882263.us-west-2.elb.amazonaws.com"
