@@ -35,7 +35,7 @@ terraform {
   # Note: DynamoDB-based locking is deprecated. To enable S3-based
   # locking, set `use_lockfile = true` below.
   backend "s3" {
-    bucket       = "eks-sandbox-tfstate-bc175f93" # from backend-bootstrap output: state_bucket_name
+    bucket       = "eks-sandbox-tfstate-0f3fca07" # from backend-bootstrap output: state_bucket_name
     key          = "eks-sandbox/terraform.tfstate"
     region       = "us-west-2"
     use_lockfile = true
