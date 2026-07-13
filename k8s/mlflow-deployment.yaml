@@ -35,7 +35,7 @@ spec:
               mlflow server --host 0.0.0.0 --port 5000
           env:
             - name: MLFLOW_ARTIFACT_BUCKET
-              value: "sandbox-eks-dvc-store-136132056902"
+              value: "${DVC_BUCKET_NAME}"
           ports:
             - containerPort: 5000
           volumeMounts:
