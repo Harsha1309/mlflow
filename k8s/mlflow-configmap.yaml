@@ -1,0 +1,8 @@
+# k8s/mlflow-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlflow-config
+  namespace: mlflow
+data:
+  MLFLOW_ARTIFACT_BUCKET: "sandbox-eks-dvc-store-891376954508"   # still has to be written by something

@@ -43,7 +43,7 @@ stages:
       params.yaml:
         mlflow.experiment_name: wine-quality
         mlflow.tracking_uri: 
-          http://a244e7ec2733a40099151fff4edaea54-115384793.us-west-2.elb.amazonaws.com
+          http://ac45811ab77ad486db19749e1d7509ae-1789882263.us-west-2.elb.amazonaws.com
         train.max_depth: 8
         train.min_samples_leaf: 2
         train.n_estimators: 200
@@ -55,14 +55,14 @@ stages:
       size: 89
     - path: model/run_id.txt
       hash: md5
-      md5: ffd691f69ad20d41a7a26d65f7a99863
+      md5: f60ae2489fb3121dcfaea48dc511afe0
       size: 32
   evaluate:
     cmd: python src/evaluate.py
     deps:
     - path: model/run_id.txt
       hash: md5
-      md5: ffd691f69ad20d41a7a26d65f7a99863
+      md5: f60ae2489fb3121dcfaea48dc511afe0
       size: 32
     - path: src/evaluate.py
       hash: md5
@@ -71,5 +71,5 @@ stages:
     outs:
     - path: eval_plot.png
       hash: md5
-      md5: 40536a7be72a8c9a4a9ded8d48385eaa
-      size: 37973
+      md5: 11d23b2ba1a3ad5e4e784672138445db
+      size: 37890
