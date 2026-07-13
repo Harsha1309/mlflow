@@ -33,9 +33,9 @@ spec:
               export MLFLOW_BACKEND_STORE_URI="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
               export MLFLOW_DEFAULT_ARTIFACT_ROOT="s3://${MLFLOW_ARTIFACT_BUCKET}"
               mlflow server --host 0.0.0.0 --port 5000
-          env:
-            - name: MLFLOW_ARTIFACT_BUCKET
-              value: "${DVC_BUCKET_NAME}"
+          envFrom:
+            - configMapRef:
+                name: mlflow-config
           ports:
             - containerPort: 5000
           volumeMounts:
